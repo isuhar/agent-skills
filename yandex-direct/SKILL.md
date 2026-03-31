@@ -21,7 +21,15 @@ metadata:
 | `YANDEX_DIRECT_TOKEN` | OAuth-токен для API Яндекс Директа |
 | `YANDEX_WORDSTAT_TOKEN` | OAuth-токен для Вордстат API (может совпадать с DIRECT) |
 
-## Авторизация и базовый запрос
+## Авторизация
+
+Токен: OAuth access_token (заголовок `Authorization: Bearer <token>`).
+
+Получение и обновление токенов — см. скилл **yandex-oauth**.
+
+При ошибке 401 — обновить токен через refresh_token.
+
+## Базовый запрос
 
 Все запросы — HTTPS POST на `https://api.direct.yandex.com/json/v5/<service>/`.
 

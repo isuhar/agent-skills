@@ -20,7 +20,15 @@ metadata:
 |---|---|
 | `YANDEX_WEBMASTER_TOKEN` | OAuth-токен (скоуп: `webmaster:verify`) |
 
-## Авторизация и базовые функции
+## Авторизация
+
+Токен: OAuth access_token (заголовок `Authorization: OAuth <token>`).
+
+Получение и обновление токенов — см. скилл **yandex-oauth**.
+
+При ошибке 401 — обновить токен через refresh_token.
+
+## Базовые функции
 
 ```python
 import urllib.request, json, os

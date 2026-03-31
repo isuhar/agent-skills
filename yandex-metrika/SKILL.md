@@ -21,7 +21,15 @@ metadata:
 | `YANDEX_METRIKA_TOKEN` | OAuth-токен для Яндекс API |
 | `YANDEX_METRIKA_COUNTER_ID` | ID счётчика |
 
-## Авторизация и запросы
+## Авторизация
+
+Токен: OAuth access_token (заголовок `Authorization: OAuth <token>`).
+
+Получение и обновление токенов — см. скилл **yandex-oauth**.
+
+При ошибке 401 — обновить токен через refresh_token.
+
+## Запросы
 
 ```python
 import urllib.request, json, os
