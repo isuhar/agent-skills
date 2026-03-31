@@ -1,6 +1,6 @@
 ---
 name: yandex-metrika
-description: Query Yandex Metrika data via REST API. Use for site traffic, ad campaign analysis, traffic sources, bounce rates, visit duration, UTM breakdown, and ad search queries.
+description: Query Yandex Metrika data via REST API. Use for site traffic, ad campaign analysis, traffic sources, bounce rates, visit duration, UTM breakdown, ad search queries, goals/conversions, e-commerce, and time-series data.
 metadata:
   clawdbot:
     emoji: "📊"
@@ -12,7 +12,7 @@ metadata:
 
 # Яндекс Метрика — REST API
 
-Данные по посетителям сайта: трафик, источники, поведение, рекламные кампании.
+Данные по посетителям сайта: трафик, источники, поведение, конверсии, рекламные кампании, e-commerce.
 
 ## Переменные окружения
 
@@ -58,18 +58,48 @@ TOKEN = get_yandex_token()
 COUNTER = os.environ["YANDEX_METRIKA_COUNTER_ID"]
 
 def ym_get(params: str) -> dict:
-    """Запрос к Stat API Яндекс Метрики."""
+    """Запрос к Stat API Яндекс Метрики (таблица)."""
     url = f"https://api-metrika.yandex.net/stat/v1/data?ids={COUNTER}&{params}"
     req = urllib.request.Request(url, headers={"Authorization": f"OAuth {TOKEN}"})
     return json.loads(urllib.request.urlopen(req).read())
+
+def ym_bytime(params: str) -> dict:
+    """Запрос с разбивкой по времени (для графиков и динамики)."""
+    url = f"https://api-metrika.yandex.net/stat/v1/data/bytime?ids={COUNTER}&{params}"
+    req = urllib.request.Request(url, headers={"Authorization": f"OAuth {TOKEN}"})
+    return json.loads(urllib.request.urlopen(req).read())
+
+def ym_comparison(params: str) -> dict:
+    """Сравнение двух сегментов."""
+    url = f"https://api-metrika.yandex.net/stat/v1/data/comparison?ids={COUNTER}&{params}"
+    req = urllib.request.Request(url, headers={"Authorization": f"OAuth {TOKEN}"})
+    return json.loads(urllib.request.urlopen(req).read())
 ```
+
+## Виды отчётов (endpoints)
+
+| Endpoint | Описание |
+|---|---|
+| `/stat/v1/data` | Таблица (основной) |
+| `/stat/v1/data/bytime` | По времени (графики, динамика) |
+| `/stat/v1/data/comparison` | Сравнение сегментов |
+| `/stat/v1/data/drilldown` | Drill-down (вложенные уровни) |
+
+Формат: JSON (по умолчанию) или CSV (добавить `.csv` к URL).
 
 ## Типичные запросы
 
 ### Общий трафик за период
 
 ```python
-data = ym_get("date1=2026-03-01&date2=2026-03-31&metrics=ym:s:visits,ym:s:users")
+data = ym_get("date1=2026-03-01&date2=2026-03-31&metrics=ym:s:visits,ym:s:users,ym:s:bounceRate,ym:s:avgVisitDurationSeconds,ym:s:pageDepth")
+```
+
+### Динамика визитов по дням (для графика)
+
+```python
+data = ym_bytime("date1=2026-03-01&date2=2026-03-31&metrics=ym:s:visits,ym:s:users&group=day")
+# group: day, week, month, hour, minute (default: day)
 ```
 
 ### Источники трафика
@@ -100,7 +130,55 @@ data = ym_get("date1=...&date2=...&metrics=ym:s:visits&dimensions=ym:s:lastDirec
 data = ym_get("date1=...&date2=...&metrics=ym:s:visits,ym:s:users&dimensions=ym:s:startURL&filters=ym:s:lastTrafficSource=='Search engine traffic'&sort=-ym:s:visits&limit=30")
 ```
 
-## Основные метрики
+### Конверсии (цели)
+
+```python
+# Количество достижений цели (нужно знать ID цели)
+data = ym_get("date1=...&date2=...&metrics=ym:s:goal<GOAL_ID>reaches,ym:s:goal<GOAL_ID>conversionRate&dimensions=ym:s:lastTrafficSource")
+
+# Все цели разом
+data = ym_get("date1=...&date2=...&metrics=ym:s:goalReaches,ym:s:goalConversionRate")
+```
+
+### Поисковые фразы (SEO)
+
+```python
+data = ym_get("date1=...&date2=...&metrics=ym:s:visits&dimensions=ym:s:lastSearchPhrase&filters=ym:s:lastSearchPhrase!~'null'&sort=-ym:s:visits&limit=50")
+```
+
+### География
+
+```python
+data = ym_get("date1=...&date2=...&metrics=ym:s:visits,ym:s:users&dimensions=ym:s:regionCountry,ym:s:regionCity&sort=-ym:s:visits&limit=30")
+```
+
+### Устройства и браузеры
+
+```python
+data = ym_get("date1=...&date2=...&metrics=ym:s:visits&dimensions=ym:s:deviceCategory")
+data = ym_get("date1=...&date2=...&metrics=ym:s:visits&dimensions=ym:s:browser")
+```
+
+### Топ страниц (хиты)
+
+```python
+# Используем префикс ym:pv: для метрик хитов
+url = f"https://api-metrika.yandex.net/stat/v1/data?ids={COUNTER}&date1=...&date2=...&metrics=ym:pv:pageviews,ym:pv:users&dimensions=ym:pv:URLPath&sort=-ym:pv:pageviews&limit=30"
+```
+
+### Сравнение двух периодов
+
+```python
+data = ym_comparison("date1_a=2026-02-01&date2_a=2026-02-28&date1_b=2026-03-01&date2_b=2026-03-31&metrics=ym:s:visits,ym:s:users&dimensions=ym:s:lastTrafficSource")
+```
+
+### Директ-расходы
+
+```python
+data = ym_get("date1=...&date2=...&metrics=ym:s:visits,ym:s:<currency>DirectExpenses&dimensions=ym:s:UTMCampaign&direct_client_logins=LOGIN")
+```
+
+## Основные метрики (визиты, ym:s:)
 
 | Метрика | Описание |
 |---|---|
@@ -109,8 +187,24 @@ data = ym_get("date1=...&date2=...&metrics=ym:s:visits,ym:s:users&dimensions=ym:
 | `ym:s:bounceRate` | Отказы (%) |
 | `ym:s:avgVisitDurationSeconds` | Средняя длительность визита (сек) |
 | `ym:s:pageDepth` | Глубина просмотра |
+| `ym:s:goalReaches` | Достижения целей (все) |
+| `ym:s:goalConversionRate` | Конверсия (все цели, %) |
+| `ym:s:goal<ID>reaches` | Достижения конкретной цели |
+| `ym:s:goal<ID>conversionRate` | Конверсия конкретной цели (%) |
+| `ym:s:newUsers` | Новые посетители |
+| `ym:s:newUsersShare` | Доля новых посетителей (%) |
+| `ym:s:percentNewVisitors` | % новых визитов |
 
-## Основные dimensions
+## Метрики хитов (ym:pv:)
+
+| Метрика | Описание |
+|---|---|
+| `ym:pv:pageviews` | Просмотры страниц |
+| `ym:pv:users` | Уникальные посетители |
+
+⚠️ Нельзя смешивать `ym:s:` и `ym:pv:` метрики/dimensions в одном запросе (кроме фильтров).
+
+## Основные dimensions (визиты)
 
 | Dimension | Описание |
 |---|---|
@@ -118,14 +212,37 @@ data = ym_get("date1=...&date2=...&metrics=ym:s:visits,ym:s:users&dimensions=ym:
 | `ym:s:UTMSource` | UTM source |
 | `ym:s:UTMMedium` | UTM medium (cpc, organic...) |
 | `ym:s:UTMCampaign` | UTM campaign |
+| `ym:s:UTMContent` | UTM content |
+| `ym:s:UTMTerm` | UTM term |
 | `ym:s:lastDirectSearchPhrase` | Поисковый запрос из Директа |
+| `ym:s:lastSearchPhrase` | Поисковый запрос (SEO) |
+| `ym:s:lastSearchEngineRoot` | Поисковая система |
+| `ym:s:lastReferalSource` | Реферальный источник |
+| `ym:s:lastSocialNetwork` | Социальная сеть |
 | `ym:s:gender` | Пол |
 | `ym:s:ageInterval` | Возрастная группа |
-| `ym:s:deviceCategory` | Устройство |
+| `ym:s:deviceCategory` | Устройство (desktop, mobile, tablet) |
 | `ym:s:operatingSystem` | ОС |
+| `ym:s:browser` | Браузер |
+| `ym:s:regionCountry` | Страна |
 | `ym:s:regionCity` | Город |
 | `ym:s:startURL` | Страница входа |
+| `ym:s:exitPage` | Страница выхода |
 | `ym:s:paramsLevel1` | Параметры визитов (уровень 1) |
+| `ym:s:paramsLevel2` | Параметры визитов (уровень 2) |
+| `ym:s:date` | Дата |
+| `ym:s:datePeriodday` | День |
+| `ym:s:datePeriodweek` | Неделя |
+| `ym:s:datePeriodmonth` | Месяц |
+| `ym:s:goal` | Цель |
+
+## Dimensions хитов (ym:pv:)
+
+| Dimension | Описание |
+|---|---|
+| `ym:pv:URLPath` | Путь страницы |
+| `ym:pv:title` | Заголовок страницы |
+| `ym:pv:URLDomain` | Домен |
 
 ## Фильтры
 
@@ -133,14 +250,68 @@ data = ym_get("date1=...&date2=...&metrics=ym:s:visits,ym:s:users&dimensions=ym:
 filters=ym:s:UTMMedium=='cpc'
 filters=ym:s:lastTrafficSource=='Ad traffic'
 filters=ym:s:UTMSource=='yandex'
+filters=ym:s:startURL=@'/blog/'
 ```
 
-Операторы: `==`, `!=`, `=~` (содержит), `!~` (не содержит), `=*` (regex), `>`, `<`.
+Операторы: `==` (равно), `!=` (не равно), `=~` (содержит подстроку), `!~` (не содержит), `=@` (содержит), `=*` (regex), `>`, `<`.
 
-## Сортировка и лимит
+Логические: `AND`, `OR` (AND приоритетнее).
 
+Можно миксовать префиксы в фильтрах: `filters=ym:s:trafficSourceName=='...' AND ym:pv:URL=@'help'`.
+
+## Параметры запроса
+
+| Параметр | Описание | По умолчанию |
+|---|---|---|
+| `date1` | Начало периода (YYYY-MM-DD, today, yesterday, NdaysAgo) | 6daysAgo |
+| `date2` | Конец периода | today |
+| `metrics` | Метрики через запятую (макс 20) | — |
+| `dimensions` | Группировки через запятую (макс 10) | — |
+| `filters` | Фильтры сегментации | — |
+| `sort` | Сортировка (минус = DESC) | — |
+| `limit` | Кол-во строк (макс 100000) | 100 |
+| `offset` | Начиная с (от 1) | 1 |
+| `accuracy` | Семплирование (1 = точно, low/medium/high) | — |
+| `group` | Группировка по времени (bytime): day, week, month, hour, minute | day |
+| `include_undefined` | Включить строки с неопределёнными значениями | false |
+| `lang` | Язык ответа (ru, en, ...) | — |
+| `timezone` | Часовой пояс (±hh:mm) | по счётчику |
+| `preset` | Шаблон отчёта (sources_summary, tech_browsers...) | — |
+
+## Шаблоны отчётов (preset)
+
+Вместо ручного указания metrics/dimensions:
+
+```python
+data = ym_get("date1=...&date2=...&preset=sources_summary")
 ```
-sort=-ym:s:visits       # по убыванию (минус = DESC)
-limit=20                # строк (макс 100000)
-offset=1                # с какой строки (начинается с 1)
+
+Доступные: `sources_summary`, `sources_search_engines`, `sources_social_networks`, `sources_direct_clicks`, `tech_browsers`, `tech_os`, `tech_devices`, `geo_country`, и другие.
+
+## Структура ответа
+
+```json
+{
+  "query": { "date1": "...", "date2": "...", "metrics": [...], "dimensions": [...] },
+  "data": [
+    {
+      "dimensions": [{"name": "...", "id": "..."}],
+      "metrics": [1234.0, 56.7]
+    }
+  ],
+  "total_rows": 100,
+  "totals": [5000.0, 3000.0],
+  "min": [1.0, 0.0],
+  "max": [500.0, 100.0],
+  "sampled": false,
+  "sample_share": 1.0
+}
 ```
+
+## Лимиты API
+
+- Метрик в запросе: до 20
+- Группировок: до 10
+- Строк в ответе: до 100 000
+- Фильтров: до 20, длина строки до 10 000 символов
+- Запросов: рекомендуется не более 5 в секунду
