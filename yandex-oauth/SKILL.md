@@ -1,12 +1,12 @@
 ---
 name: yandex-oauth
-description: Yandex OAuth token management — obtain, refresh, and validate tokens for Yandex APIs (Metrika, Direct, Webmaster). Use when tokens expire or need initial setup.
+description: Yandex OAuth token management — obtain, refresh, and persist tokens for Yandex APIs (Metrika, Direct, Webmaster). Use when tokens expire or need initial setup.
 metadata:
   clawdbot:
     emoji: "🔑"
     requires:
-      env: ["YANDEX_CLIENT_ID", "YANDEX_CLIENT_SECRET", "YANDEX_REFRESH_TOKEN"]
-      primaryEnv: "YANDEX_REFRESH_TOKEN"
+      env: ["YANDEX_CLIENT_ID", "YANDEX_CLIENT_SECRET"]
+      primaryEnv: "YANDEX_CLIENT_ID"
       bins: ["python3"]
 ---
 
@@ -14,9 +14,11 @@ metadata:
 
 Общая авторизация для всех Яндекс API (Метрика, Директ, Вебмастер).
 
-## Принцип работы
+## Важно: refresh_token не бессрочный
 
-В env var хранится **только refresh_token** (бессрочный). access_token получается программно при каждом запуске — аналогично Google Service Account подходу.
+В отличие от Google, Яндекс OAuth **возвращает новый refresh_token** при каждом обновлении. Время жизни refresh_token совпадает с access_token. Если не сохранить новый refresh_token — авторизация сломается.
+
+Поэтому токены хранятся в **файле** (не в env var).
 
 ## Переменные окружения
 
@@ -24,31 +26,68 @@ metadata:
 |---|---|
 | `YANDEX_CLIENT_ID` | Client ID OAuth-приложения |
 | `YANDEX_CLIENT_SECRET` | Client Secret OAuth-приложения |
-| `YANDEX_REFRESH_TOKEN` | Refresh token (бессрочный, хранится в env var) |
+| `YANDEX_TOKEN_FILE` | Путь к файлу с токенами (по умолчанию `~/.yandex_tokens.json`) |
 
-Env var не нужно обновлять — refresh_token живёт пока не отозван вручную.
+## Формат файла токенов
 
-## Получение access_token
+```json
+{
+  "access_token": "AQAAAACy1C6Z...",
+  "refresh_token": "1:GN686Q:uf1KBsi...",
+  "expires_in": 31536000,
+  "issued_at": 1711843200
+}
+```
+
+## Модуль авторизации
+
+Все Яндекс-скиллы используют эту функцию:
 
 ```python
-import urllib.request, urllib.parse, json, os
+import urllib.request, urllib.parse, json, os, time
+
+TOKEN_FILE = os.environ.get("YANDEX_TOKEN_FILE", os.path.expanduser("~/.yandex_tokens.json"))
 
 def get_yandex_token() -> str:
-    """Получить access_token через refresh_token. Вызывать при старте."""
+    """Получить access_token, обновив при необходимости. Сохраняет новый refresh_token в файл."""
+
+    # 1. Прочитать текущие токены из файла
+    if not os.path.exists(TOKEN_FILE):
+        raise FileNotFoundError(
+            f"Token file not found: {TOKEN_FILE}\n"
+            "Run initial setup first (see yandex-oauth skill)."
+        )
+    with open(TOKEN_FILE) as f:
+        tokens = json.load(f)
+
+    # 2. Проверить не истёк ли access_token (с запасом 1 час)
+    issued_at = tokens.get("issued_at", 0)
+    expires_in = tokens.get("expires_in", 0)
+    if time.time() < issued_at + expires_in - 3600:
+        return tokens["access_token"]
+
+    # 3. Обновить через refresh_token
     data = urllib.parse.urlencode({
         "grant_type": "refresh_token",
-        "refresh_token": os.environ["YANDEX_REFRESH_TOKEN"],
+        "refresh_token": tokens["refresh_token"],
         "client_id": os.environ["YANDEX_CLIENT_ID"],
         "client_secret": os.environ["YANDEX_CLIENT_SECRET"],
     }).encode()
     req = urllib.request.Request("https://oauth.yandex.ru/token", data=data, method="POST")
     result = json.loads(urllib.request.urlopen(req).read())
-    return result["access_token"]
 
-TOKEN = get_yandex_token()
+    # 4. Сохранить новые токены в файл
+    tokens["access_token"] = result["access_token"]
+    tokens["refresh_token"] = result["refresh_token"]
+    tokens["expires_in"] = result.get("expires_in", 31536000)
+    tokens["issued_at"] = int(time.time())
+    with open(TOKEN_FILE, "w") as f:
+        json.dump(tokens, f, indent=2)
+
+    return tokens["access_token"]
 ```
 
-## Первоначальная настройка (получение refresh_token)
+## Первоначальная настройка
 
 Выполняется **один раз** при подключении Яндекс-аккаунта.
 
@@ -71,53 +110,47 @@ https://oauth.yandex.ru/authorize?response_type=code&client_id=<CLIENT_ID>
 
 Разрешить доступ → скопировать код из URL.
 
-### Шаг 3: Обмен кода на токены
+### Шаг 3: Обмен кода на токены и сохранение
 
 ```python
-import urllib.request, urllib.parse, json
+import urllib.request, urllib.parse, json, time
+
+CLIENT_ID = "<CLIENT_ID>"
+CLIENT_SECRET = "<CLIENT_SECRET>"
+CODE = "<КОД_ИЗ_ШАГА_2>"
 
 data = urllib.parse.urlencode({
     "grant_type": "authorization_code",
-    "code": "<КОД_ИЗ_ШАГА_2>",
-    "client_id": "<CLIENT_ID>",
-    "client_secret": "<CLIENT_SECRET>",
+    "code": CODE,
+    "client_id": CLIENT_ID,
+    "client_secret": CLIENT_SECRET,
 }).encode()
 req = urllib.request.Request("https://oauth.yandex.ru/token", data=data, method="POST")
 result = json.loads(urllib.request.urlopen(req).read())
 
-print(f"refresh_token: {result['refresh_token']}")  # ← сохранить в YANDEX_REFRESH_TOKEN
-print(f"access_token: {result['access_token']}")
-print(f"expires_in: {result['expires_in']} сек")
+# Сохранить в файл
+tokens = {
+    "access_token": result["access_token"],
+    "refresh_token": result["refresh_token"],
+    "expires_in": result.get("expires_in", 31536000),
+    "issued_at": int(time.time()),
+}
+with open(os.path.expanduser("~/.yandex_tokens.json"), "w") as f:
+    json.dump(tokens, f, indent=2)
+
+print("Токены сохранены в ~/.yandex_tokens.json")
 ```
 
-Сохранить `refresh_token` в переменную окружения `YANDEX_REFRESH_TOKEN`.
+## Необходимые скоупы
 
-## Использование в скиллах
-
-Все Яндекс-скиллы (metrika, direct, webmaster) используют `get_yandex_token()`:
-
-```python
-TOKEN = get_yandex_token()
-
-# Метрика (OAuth)
-req = urllib.request.Request(url, headers={"Authorization": f"OAuth {TOKEN}"})
-
-# Директ (Bearer)
-req = urllib.request.Request(url, headers={"Authorization": f"Bearer {TOKEN}"})
-```
-
-## Время жизни токенов
-
-| Токен | Время жизни |
+| API | Скоуп |
 |---|---|
-| `access_token` | ~1 год (зависит от приложения), `expires_in` в ответе |
-| `refresh_token` | Бессрочный (пока не отозван вручную) |
+| Метрика | `metrika:read` (чтение), `metrika:write` (запись) |
+| Директ | Доступ настраивается при регистрации приложения |
+| Вебмастер | `webmaster:verify` |
 
-## Отзыв токена
+## Рекомендации
 
-```
-POST https://oauth.yandex.ru/revoke_token
-Content-Type: application/x-www-form-urlencoded
-
-access_token=<TOKEN>&client_id=<CLIENT_ID>&client_secret=<CLIENT_SECRET>
-```
+- Яндекс рекомендует обновлять долгоживущие токены **раз в 3 месяца**
+- При обновлении access_token может не измениться, если срок ещё длительный
+- `~/.yandex_tokens.json` не должен попадать в git — добавить в `.gitignore`

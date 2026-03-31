@@ -5,8 +5,8 @@ metadata:
   clawdbot:
     emoji: "📢"
     requires:
-      env: ["YANDEX_CLIENT_ID", "YANDEX_CLIENT_SECRET", "YANDEX_REFRESH_TOKEN"]
-      primaryEnv: "YANDEX_REFRESH_TOKEN"
+      env: ["YANDEX_CLIENT_ID", "YANDEX_CLIENT_SECRET"]
+      primaryEnv: "YANDEX_CLIENT_ID"
       bins: ["python3"]
 ---
 
@@ -20,26 +20,40 @@ metadata:
 |---|---|
 | `YANDEX_CLIENT_ID` | Client ID OAuth-приложения |
 | `YANDEX_CLIENT_SECRET` | Client Secret OAuth-приложения |
-| `YANDEX_REFRESH_TOKEN` | Refresh token (бессрочный) |
+| `YANDEX_TOKEN_FILE` | Путь к файлу с токенами (по умолчанию `~/.yandex_tokens.json`) |
 
-Получение токенов — см. скилл **yandex-oauth**.
+Настройка токенов — см. скилл **yandex-oauth**.
 
 ## Авторизация и базовый запрос
+
+Авторизация через файл токенов с авто-обновлением (см. `get_yandex_token()` в скилле **yandex-oauth**).
 
 Все запросы — HTTPS POST на `https://api.direct.yandex.com/json/v5/<service>/`.
 
 ```python
-import urllib.request, urllib.parse, json, os
+import urllib.request, urllib.parse, json, os, time
+
+TOKEN_FILE = os.environ.get("YANDEX_TOKEN_FILE", os.path.expanduser("~/.yandex_tokens.json"))
 
 def get_yandex_token() -> str:
+    with open(TOKEN_FILE) as f:
+        tokens = json.load(f)
+    if time.time() < tokens.get("issued_at", 0) + tokens.get("expires_in", 0) - 3600:
+        return tokens["access_token"]
     data = urllib.parse.urlencode({
         "grant_type": "refresh_token",
-        "refresh_token": os.environ["YANDEX_REFRESH_TOKEN"],
+        "refresh_token": tokens["refresh_token"],
         "client_id": os.environ["YANDEX_CLIENT_ID"],
         "client_secret": os.environ["YANDEX_CLIENT_SECRET"],
     }).encode()
-    req = urllib.request.Request("https://oauth.yandex.ru/token", data=data, method="POST")
-    return json.loads(urllib.request.urlopen(req).read())["access_token"]
+    result = json.loads(urllib.request.urlopen(
+        urllib.request.Request("https://oauth.yandex.ru/token", data=data, method="POST")
+    ).read())
+    tokens.update({"access_token": result["access_token"], "refresh_token": result["refresh_token"],
+                    "expires_in": result.get("expires_in", 31536000), "issued_at": int(time.time())})
+    with open(TOKEN_FILE, "w") as f:
+        json.dump(tokens, f, indent=2)
+    return tokens["access_token"]
 
 TOKEN = get_yandex_token()
 
