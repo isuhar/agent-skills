@@ -176,6 +176,28 @@ data = ym_get("date1=...&date2=...&metrics=ym:s:visits&dimensions=ym:s:paramsLev
 
 Уровни: `paramsLevel1` ... `paramsLevel5` (до 5 вложений).
 
+Пример: если на сайте отправляется `ym(ID, 'params', {signup: {method: 'google', plan: 'pro'}})`, то:
+- `paramsLevel1` = `signup`
+- `paramsLevel2` = `method` или `plan`
+- `paramsLevel3` = `google` или `pro`
+
+```python
+# Все параметры уровня 1 с количеством визитов
+data = ym_get("date1=...&date2=...&metrics=ym:s:visits,ym:s:users&dimensions=ym:s:paramsLevel1&sort=-ym:s:visits")
+
+# Детализация конкретного параметра (drill-down)
+data = ym_get("date1=...&date2=...&metrics=ym:s:visits&dimensions=ym:s:paramsLevel1,ym:s:paramsLevel2,ym:s:paramsLevel3&filters=ym:s:paramsLevel1=='signup'")
+
+# Динамика параметра по дням
+data = ym_bytime("date1=...&date2=...&metrics=ym:s:visits&dimensions=ym:s:paramsLevel1&filters=ym:s:paramsLevel1=='signup'&group=day")
+
+# Комбинация: параметры + источник трафика
+data = ym_get("date1=...&date2=...&metrics=ym:s:visits&dimensions=ym:s:paramsLevel1,ym:s:lastTrafficSource&filters=ym:s:paramsLevel1=='signup'")
+
+# Фильтр по значению вложенного уровня
+data = ym_get("date1=...&date2=...&metrics=ym:s:visits&dimensions=ym:s:paramsLevel1&filters=ym:s:paramsLevel2=='google'")
+```
+
 ### JavaScript-цели (reachGoal)
 
 Цели, отправленные через `ym(COUNTER, 'reachGoal', 'TARGET_NAME')`:
