@@ -159,6 +159,32 @@ data = ym_get("date1=...&date2=...&metrics=ym:s:visits&dimensions=ym:s:deviceCat
 data = ym_get("date1=...&date2=...&metrics=ym:s:visits&dimensions=ym:s:browser")
 ```
 
+### Параметры визитов (кастомные события)
+
+Кастомные данные, переданные через `params` в JavaScript-счётчике (`ym(COUNTER, 'params', {...})`).
+
+```python
+# Уровень 1
+data = ym_get("date1=...&date2=...&metrics=ym:s:visits&dimensions=ym:s:paramsLevel1&sort=-ym:s:visits")
+
+# Уровень 1 + 2 (вложенные)
+data = ym_get("date1=...&date2=...&metrics=ym:s:visits&dimensions=ym:s:paramsLevel1,ym:s:paramsLevel2&sort=-ym:s:visits")
+
+# Фильтр по конкретному параметру
+data = ym_get("date1=...&date2=...&metrics=ym:s:visits&dimensions=ym:s:paramsLevel2&filters=ym:s:paramsLevel1=='button_click'")
+```
+
+Уровни: `paramsLevel1` ... `paramsLevel5` (до 5 вложений).
+
+### JavaScript-цели (reachGoal)
+
+Цели, отправленные через `ym(COUNTER, 'reachGoal', 'TARGET_NAME')`:
+
+```python
+# Нужно знать ID цели (из настроек Метрики)
+data = ym_get("date1=...&date2=...&metrics=ym:s:goal<GOAL_ID>reaches&dimensions=ym:s:lastTrafficSource")
+```
+
 ### Топ страниц (хиты)
 
 ```python
