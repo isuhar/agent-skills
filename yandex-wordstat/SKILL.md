@@ -35,18 +35,47 @@ https://api.wordstat.yandex.net/v1/
 - 1000 запросов/сутки
 - Проверить остаток: `POST /v1/userInfo`
 
+## Авторизация — интеграция с yandex-oauth
+
+Используй `get_yandex_token()` из скилла `yandex-oauth` для автоматического refresh. Не читай токен из файла напрямую — он может быть просрочен.
+
+```python
+import urllib.request, urllib.parse, json, os, time
+
+TOKEN_FILE = os.environ.get("YANDEX_TOKEN_FILE", os.path.expanduser("~/.yandex_tokens.json"))
+
+def get_yandex_token() -> str:
+    """Получить access_token, обновив при необходимости."""
+    if not os.path.exists(TOKEN_FILE):
+        raise FileNotFoundError(f"Token file not found: {TOKEN_FILE}")
+    with open(TOKEN_FILE) as f:
+        tokens = json.load(f)
+    issued_at = tokens.get("issued_at", 0)
+    expires_in = tokens.get("expires_in", 0)
+    if issued_at and expires_in and time.time() > issued_at + expires_in - 600:
+        # Refresh
+        data = urllib.parse.urlencode({
+            "grant_type": "refresh_token",
+            "refresh_token": tokens["refresh_token"],
+            "client_id": os.environ["YANDEX_CLIENT_ID"],
+            "client_secret": os.environ["YANDEX_CLIENT_SECRET"],
+        }).encode()
+        req = urllib.request.Request("https://oauth.yandex.ru/token", data=data)
+        resp = json.loads(urllib.request.urlopen(req).read())
+        resp["issued_at"] = int(time.time())
+        with open(TOKEN_FILE, "w") as f:
+            json.dump(resp, f, indent=2)
+        return resp["access_token"]
+    return tokens["access_token"]
+```
+
 ## Общий шаблон запроса
 
 ```python
-import urllib.request, json, os
-
 def wordstat_request(endpoint, body, token=None):
     """Запрос к Wordstat API."""
     if not token:
-        token_file = os.environ.get("YANDEX_TOKEN_FILE")
-        if token_file:
-            with open(token_file) as f:
-                token = json.load(f)["access_token"]
+        token = get_yandex_token()
     
     url = f"https://api.wordstat.yandex.net/v1/{endpoint}"
     req = urllib.request.Request(url,
