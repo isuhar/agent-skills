@@ -1,94 +1,68 @@
 ---
 name: yandex-metrika
-description: Query Yandex Metrika data via REST API. Use for site traffic, ad campaign analysis (Yandex.Direct), traffic sources, bounce rates, visit duration, UTM breakdown, and ad search queries.
+description: Query Yandex Metrika data via REST API. Use for site traffic, ad campaign analysis, traffic sources, bounce rates, visit duration, UTM breakdown, and ad search queries.
 ---
 
 # Яндекс Метрика — REST API
 
-Данные по посетителям сайта: трафик, рекламные кампании (Яндекс.Директ), источники, поведение.
+Данные по посетителям сайта: трафик, источники, поведение, рекламные кампании.
 
 ## Переменные окружения
 
-- `YANDEX_METRIKA_TOKEN` — base64-encoded JSON с полями `access_token`, `refresh_token`, `expires_in`, `token_type`
-- `YANDEX_METRIKA_COUNTER_ID` — ID счётчика
-- `YANDEX_CLIENT_ID` — Client ID приложения Яндекс OAuth
-- `YANDEX_CLIENT_SECRET` — Client Secret приложения Яндекс OAuth
+| Переменная | Описание |
+|---|---|
+| `YANDEX_METRIKA_TOKEN` | OAuth-токен для Яндекс API |
+| `YANDEX_METRIKA_COUNTER_ID` | ID счётчика |
 
-## Авторизация
-
-Используй `ym_auth.py` (в этой же папке) — парсит base64 JSON, проверяет срок действия и автоматически рефрешит токен:
+## Авторизация и запросы
 
 ```python
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../yandex-metrika"))
-from ym_auth import get_token
-token = get_token()
-```
+import urllib.request, json, os
 
-## Как делать запросы
+TOKEN = os.environ["YANDEX_METRIKA_TOKEN"]
+COUNTER = os.environ["YANDEX_METRIKA_COUNTER_ID"]
 
-REST API через `urllib` (без внешних зависимостей):
-
-```python
-import urllib.request, json, os, base64
-
-def get_ym_token():
-    raw = os.environ.get('YANDEX_METRIKA_TOKEN', '')
-    try:
-        data = json.loads(base64.b64decode(raw + '=='))
-        return data.get('access_token', raw)
-    except Exception:
-        return raw
-
-token = get_ym_token()
-counter = os.environ.get('YANDEX_METRIKA_COUNTER_ID')
-
-url = f'https://api-metrika.yandex.net/stat/v1/data?ids={counter}&date1=2026-02-01&date2=2026-02-14&metrics=ym:s:visits,ym:s:users&dimensions=ym:s:lastTrafficSource&limit=20&sort=-ym:s:visits'
-req = urllib.request.Request(url, headers={'Authorization': f'OAuth {token}'})
-resp = urllib.request.urlopen(req)
-data = json.loads(resp.read())
+def ym_get(params: str) -> dict:
+    """Запрос к Stat API Яндекс Метрики."""
+    url = f"https://api-metrika.yandex.net/stat/v1/data?ids={COUNTER}&{params}"
+    req = urllib.request.Request(url, headers={"Authorization": f"OAuth {TOKEN}"})
+    return json.loads(urllib.request.urlopen(req).read())
 ```
 
 ## Типичные запросы
 
 ### Общий трафик за период
-```
-metrics=ym:s:visits,ym:s:users
+
+```python
+data = ym_get("date1=2026-03-01&date2=2026-03-31&metrics=ym:s:visits,ym:s:users")
 ```
 
 ### Источники трафика
-```
-dimensions=ym:s:lastTrafficSource
-```
-Возвращает: Ad traffic, Direct traffic, Search engine traffic, Social network traffic, Referral, Messenger и др.
 
-### По UTM Source
-```
-dimensions=ym:s:UTMSource
+```python
+data = ym_get("date1=2026-03-01&date2=2026-03-31&metrics=ym:s:visits,ym:s:users&dimensions=ym:s:lastTrafficSource&sort=-ym:s:visits&limit=20")
 ```
 
-### Рекламные кампании (CPC)
-```
-dimensions=ym:s:UTMCampaign
-filters=ym:s:UTMMedium=='cpc'
+### По UTM Source / Medium / Campaign
+
+```python
+# UTM source
+data = ym_get("date1=...&date2=...&metrics=ym:s:visits&dimensions=ym:s:UTMSource")
+
+# Рекламные кампании (CPC)
+data = ym_get("date1=...&date2=...&metrics=ym:s:visits,ym:s:users&dimensions=ym:s:UTMCampaign&filters=ym:s:UTMMedium=='cpc'")
 ```
 
-### Рекламные поисковые запросы
-```
-dimensions=ym:s:lastDirectSearchPhrase
-filters=ym:s:lastDirectSearchPhrase!~'null'
+### Поисковые запросы из Яндекс.Директ
+
+```python
+data = ym_get("date1=...&date2=...&metrics=ym:s:visits&dimensions=ym:s:lastDirectSearchPhrase&filters=ym:s:lastDirectSearchPhrase!~'null'&sort=-ym:s:visits&limit=50")
 ```
 
 ### SEO трафик по страницам
-```
-dimensions=ym:s:startURL
-filters=ym:s:lastTrafficSource=='Search engine traffic'
-```
 
-### Параметры визитов (custom params)
-```
-dimensions=ym:s:paramsLevel1
-dimensions=ym:s:paramsLevel1,ym:s:paramsLevel2
+```python
+data = ym_get("date1=...&date2=...&metrics=ym:s:visits,ym:s:users&dimensions=ym:s:startURL&filters=ym:s:lastTrafficSource=='Search engine traffic'&sort=-ym:s:visits&limit=30")
 ```
 
 ## Основные метрики
@@ -109,14 +83,14 @@ dimensions=ym:s:paramsLevel1,ym:s:paramsLevel2
 | `ym:s:UTMSource` | UTM source |
 | `ym:s:UTMMedium` | UTM medium (cpc, organic...) |
 | `ym:s:UTMCampaign` | UTM campaign |
-| `ym:s:lastDirectSearchPhrase` | Поисковый запрос из Яндекс.Директ |
+| `ym:s:lastDirectSearchPhrase` | Поисковый запрос из Директа |
 | `ym:s:gender` | Пол |
 | `ym:s:ageInterval` | Возрастная группа |
 | `ym:s:deviceCategory` | Устройство |
 | `ym:s:operatingSystem` | ОС |
 | `ym:s:regionCity` | Город |
+| `ym:s:startURL` | Страница входа |
 | `ym:s:paramsLevel1` | Параметры визитов (уровень 1) |
-| `ym:s:paramsLevel2` | Параметры визитов (уровень 2) |
 
 ## Фильтры
 
@@ -126,9 +100,12 @@ filters=ym:s:lastTrafficSource=='Ad traffic'
 filters=ym:s:UTMSource=='yandex'
 ```
 
+Операторы: `==`, `!=`, `=~` (содержит), `!~` (не содержит), `=*` (regex), `>`, `<`.
+
 ## Сортировка и лимит
 
 ```
-sort=-ym:s:visits       # по убыванию
+sort=-ym:s:visits       # по убыванию (минус = DESC)
 limit=20                # строк (макс 100000)
+offset=1                # с какой строки (начинается с 1)
 ```
