@@ -5,8 +5,8 @@ metadata:
   clawdbot:
     emoji: "📊"
     requires:
-      env: ["YANDEX_METRIKA_TOKEN", "YANDEX_METRIKA_COUNTER_ID"]
-      primaryEnv: "YANDEX_METRIKA_TOKEN"
+      env: ["YANDEX_CLIENT_ID", "YANDEX_CLIENT_SECRET", "YANDEX_REFRESH_TOKEN", "YANDEX_METRIKA_COUNTER_ID"]
+      primaryEnv: "YANDEX_REFRESH_TOKEN"
       bins: ["python3"]
 ---
 
@@ -18,23 +18,29 @@ metadata:
 
 | Переменная | Описание |
 |---|---|
-| `YANDEX_METRIKA_TOKEN` | OAuth-токен для Яндекс API |
+| `YANDEX_CLIENT_ID` | Client ID OAuth-приложения |
+| `YANDEX_CLIENT_SECRET` | Client Secret OAuth-приложения |
+| `YANDEX_REFRESH_TOKEN` | Refresh token (бессрочный) |
 | `YANDEX_METRIKA_COUNTER_ID` | ID счётчика |
 
-## Авторизация
+Получение токенов — см. скилл **yandex-oauth**.
 
-Токен: OAuth access_token (заголовок `Authorization: OAuth <token>`).
-
-Получение и обновление токенов — см. скилл **yandex-oauth**.
-
-При ошибке 401 — обновить токен через refresh_token.
-
-## Запросы
+## Авторизация и запросы
 
 ```python
-import urllib.request, json, os
+import urllib.request, urllib.parse, json, os
 
-TOKEN = os.environ["YANDEX_METRIKA_TOKEN"]
+def get_yandex_token() -> str:
+    data = urllib.parse.urlencode({
+        "grant_type": "refresh_token",
+        "refresh_token": os.environ["YANDEX_REFRESH_TOKEN"],
+        "client_id": os.environ["YANDEX_CLIENT_ID"],
+        "client_secret": os.environ["YANDEX_CLIENT_SECRET"],
+    }).encode()
+    req = urllib.request.Request("https://oauth.yandex.ru/token", data=data, method="POST")
+    return json.loads(urllib.request.urlopen(req).read())["access_token"]
+
+TOKEN = get_yandex_token()
 COUNTER = os.environ["YANDEX_METRIKA_COUNTER_ID"]
 
 def ym_get(params: str) -> dict:

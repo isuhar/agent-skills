@@ -5,8 +5,8 @@ metadata:
   clawdbot:
     emoji: "📢"
     requires:
-      env: ["YANDEX_DIRECT_TOKEN"]
-      primaryEnv: "YANDEX_DIRECT_TOKEN"
+      env: ["YANDEX_CLIENT_ID", "YANDEX_CLIENT_SECRET", "YANDEX_REFRESH_TOKEN"]
+      primaryEnv: "YANDEX_REFRESH_TOKEN"
       bins: ["python3"]
 ---
 
@@ -18,25 +18,30 @@ metadata:
 
 | Переменная | Описание |
 |---|---|
-| `YANDEX_DIRECT_TOKEN` | OAuth-токен для API Яндекс Директа |
-| `YANDEX_WORDSTAT_TOKEN` | OAuth-токен для Вордстат API (может совпадать с DIRECT) |
+| `YANDEX_CLIENT_ID` | Client ID OAuth-приложения |
+| `YANDEX_CLIENT_SECRET` | Client Secret OAuth-приложения |
+| `YANDEX_REFRESH_TOKEN` | Refresh token (бессрочный) |
 
-## Авторизация
+Получение токенов — см. скилл **yandex-oauth**.
 
-Токен: OAuth access_token (заголовок `Authorization: Bearer <token>`).
-
-Получение и обновление токенов — см. скилл **yandex-oauth**.
-
-При ошибке 401 — обновить токен через refresh_token.
-
-## Базовый запрос
+## Авторизация и базовый запрос
 
 Все запросы — HTTPS POST на `https://api.direct.yandex.com/json/v5/<service>/`.
 
 ```python
-import urllib.request, json, os
+import urllib.request, urllib.parse, json, os
 
-TOKEN = os.environ["YANDEX_DIRECT_TOKEN"]
+def get_yandex_token() -> str:
+    data = urllib.parse.urlencode({
+        "grant_type": "refresh_token",
+        "refresh_token": os.environ["YANDEX_REFRESH_TOKEN"],
+        "client_id": os.environ["YANDEX_CLIENT_ID"],
+        "client_secret": os.environ["YANDEX_CLIENT_SECRET"],
+    }).encode()
+    req = urllib.request.Request("https://oauth.yandex.ru/token", data=data, method="POST")
+    return json.loads(urllib.request.urlopen(req).read())["access_token"]
+
+TOKEN = get_yandex_token()
 
 def direct_request(service: str, method: str, params: dict) -> dict:
     url = f"https://api.direct.yandex.com/json/v5/{service}/"
@@ -233,7 +238,7 @@ direct_request("campaigns", "resume", {"SelectionCriteria": {"Ids": [campaign_id
 ### topRequests — частотность фраз
 
 ```python
-WORDSTAT_TOKEN = os.environ.get("YANDEX_WORDSTAT_TOKEN", TOKEN)
+WORDSTAT_TOKEN = TOKEN  # тот же токен, если приложение имеет доступ к Вордстат API
 
 def wordstat_top(phrase: str, regions=None, num=50) -> dict:
     body = {"phrase": phrase, "numPhrases": num}
