@@ -1,6 +1,13 @@
 ---
 name: yandex-direct
 description: Manage Yandex Direct ad campaigns and query Wordstat via API. Use for ad statistics, campaign management, keyword analysis, search query reports, and keyword research via Wordstat.
+metadata:
+  clawdbot:
+    emoji: "📢"
+    requires:
+      env: ["YANDEX_DIRECT_TOKEN"]
+      primaryEnv: "YANDEX_DIRECT_TOKEN"
+      bins: ["python3"]
 ---
 
 # Яндекс Директ + Вордстат API

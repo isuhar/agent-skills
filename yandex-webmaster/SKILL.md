@@ -1,6 +1,13 @@
 ---
 name: yandex-webmaster
 description: Query Yandex Webmaster API v4. Use for indexing status, search queries, SQI history, sitemaps, diagnostics, recrawl, external/internal links, and pages in search.
+metadata:
+  clawdbot:
+    emoji: "🔍"
+    requires:
+      env: ["YANDEX_WEBMASTER_TOKEN"]
+      primaryEnv: "YANDEX_WEBMASTER_TOKEN"
+      bins: ["python3"]
 ---
 
 # Яндекс Вебмастер — API v4

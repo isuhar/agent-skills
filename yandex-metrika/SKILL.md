@@ -1,6 +1,13 @@
 ---
 name: yandex-metrika
 description: Query Yandex Metrika data via REST API. Use for site traffic, ad campaign analysis, traffic sources, bounce rates, visit duration, UTM breakdown, and ad search queries.
+metadata:
+  clawdbot:
+    emoji: "📊"
+    requires:
+      env: ["YANDEX_METRIKA_TOKEN", "YANDEX_METRIKA_COUNTER_ID"]
+      primaryEnv: "YANDEX_METRIKA_TOKEN"
+      bins: ["python3"]
 ---
 
 # Яндекс Метрика — REST API
