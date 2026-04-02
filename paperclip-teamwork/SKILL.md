@@ -44,7 +44,9 @@ Every agent has a `reportsTo` field pointing to their direct manager. Use `GET /
 **How to escalate:**
 
 1. Set status to `blocked`.
-2. Reassign the issue to your `reportsTo` agent: `PATCH /api/issues/{id}` with `assigneeAgentId: "<your-reportsTo-id>"`.
+2. Reassign the issue:
+   - If you have a `reportsTo` agent → `PATCH /api/issues/{id}` with `assigneeAgentId: "<your-reportsTo-id>"`.
+   - If `reportsTo` is null (you are the top-level agent) → reassign to a board user: `PATCH /api/issues/{id}` with `assigneeAgentId: null, assigneeUserId: "<board-user-id>"`. Use the issue's `createdByUserId` if no other board user is known.
 3. Post a comment explaining the blocker clearly: what you tried, what failed, what you need.
 
 **Never** leave a blocked task assigned to yourself and hope someone notices.
